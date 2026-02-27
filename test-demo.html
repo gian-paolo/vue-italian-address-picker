@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ANNCSU API - Demo PrimeVue</title>
+    
+    <!-- PrimeVue & PrimeFlex CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/primevue/resources/themes/lara-light-blue/theme.css">
+    <link rel="stylesheet" href="https://unpkg.com/primevue/resources/primevue.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/primeicons/primeicons.css">
+    <link rel="stylesheet" href="https://unpkg.com/primeflex@3.3.1/primeflex.min.css">
+
+    <!-- Vue and PrimeVue JS -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/primevue/core/core.min.js"></script>
+    <script src="https://unpkg.com/primevue/autocomplete/autocomplete.min.js"></script>
+
+    <style>
+        body { font-family: var(--font-family); background-color: #f8fafc; padding: 2rem; }
+        .demo-card { max-width: 900px; margin: 0 auto; background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+        .result-box { background: #f1f5f9; padding: 1rem; border-radius: 8px; margin-top: 2rem; border-left: 4px solid #3b82f6; }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <div class="demo-card">
+        <h2 class="text-3xl font-bold mb-2 text-900 text-center">ANNCSU Address Picker</h2>
+        <p class="text-600 mb-5 text-center">Seleziona un indirizzo certificato in tempo reale dall'API v1</p>
+
+        <div class="p-fluid grid formgrid">
+            <!-- COMUNE -->
+            <div class="field col-12 md:col-4">
+                <label class="font-bold block mb-2">Comune</label>
+                <p-autocomplete 
+                    v-model="form.municipality"
+                    :suggestions="suggestions.municipalities"
+                    @complete="searchMunicipality"
+                    option-label="name"
+                    placeholder="Cerca Comune..."
+                    dropdown
+                >
+                    <template #option="slotProps">
+                        <div class="flex flex-column">
+                            <span class="font-medium">{{ slotProps.option.name }}</span>
+                            <small class="text-500">{{ slotProps.option.province }} ({{ slotProps.option.region }})</small>
+                        </div>
+                    </template>
+                </p-autocomplete>
+            </div>
+
+            <!-- STRADA -->
+            <div class="field col-12 md:col-6">
+                <label class="font-bold block mb-2">Indirizzo</label>
+                <p-autocomplete 
+                    v-model="form.street"
+                    :suggestions="suggestions.streets"
+                    @complete="searchStreet"
+                    :disabled="!form.municipality"
+                    option-label="full_street_name"
+                    placeholder="Via, Piazza, Corso..."
+                >
+                    <template #option="slotProps">
+                        <div class="flex align-items-center">
+                            <i class="pi pi-map-marker mr-2 text-blue-500"></i>
+                            <div>
+                                <span>{{ slotProps.option.full_street_name }}</span>
+                                <small v-if="slotProps.option.locality" class="block text-xs italic">{{ slotProps.option.locality }}</small>
+                            </div>
+                        </div>
+                    </template>
+                </p-autocomplete>
+            </div>
+
+            <!-- CIVICO -->
+            <div class="field col-12 md:col-2">
+                <label class="font-bold block mb-2">Civico</label>
+                <p-autocomplete 
+                    v-model="form.address"
+                    :suggestions="suggestions.addresses"
+                    @complete="searchNumber"
+                    :disabled="!form.street"
+                    option-label="full_number"
+                    placeholder="N°"
+                ></p-autocomplete>
+            </div>
+        </div>
+
+        <!-- Risultato JSON -->
+        <div class="result-box" v-if="form.address">
+            <h4 class="mt-0 mb-2">Dati Selezionati (Pronti per il DB):</h4>
+            <pre class="text-xs overflow-auto">{{ JSON.stringify(form, null, 2) }}</pre>
+        </div>
+    </div>
+</div>
+
+<script>
+    const { createApp, ref, watch } = Vue;
+
+    const app = createApp({
+        setup() {
+            const baseUrl = 'https://anncsu-api.dataws.it/v1';
+            const form = ref({ municipality: null, street: null, address: null });
+            const suggestions = ref({ municipalities: [], streets: [], addresses: [] });
+
+            // Fetch helper
+            const apiRequest = async (endpoint, params) => {
+                const url = new URL(`${baseUrl}/${endpoint}`);
+                Object.entries(params).forEach(([k, v]) => url.searchParams.append(k, v));
+                const res = await fetch(url);
+                return res.json();
+            };
+
+            const searchMunicipality = async (event) => {
+                if (event.query.length < 2) return;
+                suggestions.value.municipalities = await apiRequest('municipalities', {
+                    name: `ilike.*${event.query}*`,
+                    limit: 10
+                });
+            };
+
+            const searchStreet = async (event) => {
+                if (!form.value.municipality || event.query.length < 3) return;
+                suggestions.value.streets = await apiRequest('streets', {
+                    istat_code: `eq.${form.value.municipality.istat_code}`,
+                    name: `ilike.*${event.query}*`,
+                    limit: 15
+                });
+            };
+
+            const searchNumber = async (event) => {
+                if (!form.value.street) return;
+                suggestions.value.addresses = await apiRequest('addresses', {
+                    street_id: `eq.${form.value.street.id}`,
+                    full_number: `ilike.${event.query}*`,
+                    limit: 20,
+                    order: 'number.asc'
+                });
+            };
+
+            // Reset Cascade
+            watch(() => form.value.municipality, () => { form.value.street = null; form.value.address = null; });
+            watch(() => form.value.street, () => { form.value.address = null; });
+
+            return { form, suggestions, searchMunicipality, searchStreet, searchNumber };
+        }
+    });
+
+    app.use(PrimeVue.Config);
+    app.component('p-autocomplete', PrimeVue.AutoComplete);
+    app.mount('#app');
+</script>
+
+</body>
+</html>
