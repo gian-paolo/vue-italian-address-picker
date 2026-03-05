@@ -1,0 +1,49 @@
+{
+  "name": "@pallari/vue-italian-address-picker",
+  "version": "1.0.0",
+  "description": "Professional Vue 3 + PrimeVue component for certified Italian address lookup via ANNCSU/DataWS API.",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/vue-italian-address-picker.umd.cjs",
+  "module": "./dist/vue-italian-address-picker.js",
+  "exports": {
+    ".": {
+      "import": "./dist/vue-italian-address-picker.js",
+      "require": "./dist/vue-italian-address-picker.umd.cjs"
+    },
+    "./style.css": "./dist/style.css"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc && vite build",
+    "preview": "vite preview"
+  },
+  "peerDependencies": {
+    "vue": "^3.3.0",
+    "primevue": "^3.40.0 || ^4.0.0"
+  },
+  "dependencies": {
+    "@pallari/italian-address-client": "^1.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0",
+    "vue-tsc": "^1.8.27",
+    "primevue": "^3.40.0"
+  },
+  "keywords": [
+    "vue",
+    "primevue",
+    "anncsu",
+    "italy",
+    "address",
+    "picker",
+    "autocomplete",
+    "istat"
+  ],
+  "author": "Gian-Paolo Pallari <dev@pallari.it>",
+  "license": "MIT"
+}
