@@ -1,7 +1,7 @@
 {
   "name": "@pallari/vue-italian-address-picker",
-  "version": "1.0.0",
-  "description": "Professional Vue 3 + PrimeVue component for certified Italian address lookup via ANNCSU/DataWS API.",
+  "version": "1.1.0",
+  "description": "Professional Vue 3 + PrimeVue component library for certified Italian address lookup via ANNCSU/DataWS API.",
   "type": "module",
   "files": [
     "dist"
@@ -25,7 +25,7 @@
     "primevue": "^3.40.0 || ^4.0.0"
   },
   "dependencies": {
-    "@pallari/italian-address-client": "^1.1.3"
+    "@pallari/italian-address-client": "^1.2.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",

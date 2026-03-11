@@ -7,17 +7,12 @@ A ready-to-use Vue 3 component for professional Italian address lookup and norma
 
 ## Features
 
-- **Cascading Search**: Municipality → Street → Civic number.
+- **Flexible Architecture**: Use the all-in-one `AnncsuiFullAddressPicker` or compose your own form with **Atomic Components**.
+- **Unified & Cascaded Modes**: Support for standard civic selection or detailed variant selection (internals, scales).
+- **Headless Logic**: Use the `useItalianAddress` composable for custom UIs without PrimeVue.
+- **Cascading Search**: Municipality → Street → Civic number → Variant.
 - **Certified Data**: Uses official ANNCSU/ISTAT data.
-- **PrimeVue Integrated**: Works seamlessly with PrimeVue themes and styling.
 - **TypeScript Support**: Full type safety for address entities.
-- **Smart Colors**: Visual feedback for "Red" (commercial) and "Black" (residential) civic numbers (specific to cities like Florence or Genoa).
-
-## Prerequisites
-
-- Vue 3
-- PrimeVue 3.x or 4.x
-- A PrimeVue theme (e.g., Aura, Lara, Wind)
 
 ## Installation
 
@@ -27,7 +22,7 @@ npm install @pallari/vue-italian-address-picker @pallari/italian-address-client
 
 ## Usage
 
-### 1. Register the component
+### 1. Ready-to-use Component (All-in-one)
 
 ```vue
 <script setup>
@@ -38,32 +33,66 @@ import '@pallari/vue-italian-address-picker/dist/style.css';
 const addressData = ref({
   municipality: null,
   street: null,
-  address: null
+  address: null,
+  variant: null
 });
-
-const handleChange = (val) => {
-  console.log('Selected address:', val);
-};
 </script>
 
 <template>
-  <div class="card">
-    <h3>Indirizzo di Spedizione</h3>
-    <AnncsuiFullAddressPicker 
-      v-model="addressData"
-      @change="handleChange"
-    />
-  </div>
+  <AnncsuiFullAddressPicker 
+    v-model="addressData"
+    mode="cascaded" 
+    layout="grid"
+  />
 </template>
 ```
 
-### 2. Properties
+### 2. Atomic Components (Manual Composition)
+
+For maximum flexibility, you can use the single components:
+
+```vue
+<script setup>
+import { 
+  AnncsuiMunicipality, 
+  AnncsuiStreet, 
+  useItalianAddress 
+} from '@pallari/vue-italian-address-picker';
+
+const { state, suggestions, loading, searchMunicipalities, searchStreets } = useItalianAddress();
+</script>
+
+<template>
+  <AnncsuiMunicipality 
+    v-model="state.municipality" 
+    :suggestions="suggestions.municipalities"
+    :loading="loading.municipalities"
+    @complete="searchMunicipalities"
+  />
+
+  <AnncsuiStreet 
+    v-model="state.street" 
+    :suggestions="suggestions.streets"
+    :loading="loading.streets"
+    :disabled="!state.municipality"
+    @complete="searchStreets"
+  />
+</template>
+```
+
+## Properties (`AnncsuiFullAddressPicker`)
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
 | `baseUrl` | `string` | `https://anncsu-api.dataws.it/v1` | Custom API endpoint. |
+| `mode` | `string` | `cascaded` | `cascaded` (Select N° -> Select Variant) or `unified` (Select everything in one list). |
+| `layout` | `string` | `grid` | `grid` (Responsive grid) or `vertical` (Column). |
 | `placeholderMunicipality` | `string` | `Cerca Comune...` | Placeholder for municipality field. |
-| `enableCivicColors` | `boolean` | `true` | Enable red/black color coding for civics. |
+
+## Composables (`useItalianAddress`)
+
+The logic is exported as a Vue composable for headless use or custom UI integration. It manages state, cascading resets, and API calls.
+
 
 ## Development
 

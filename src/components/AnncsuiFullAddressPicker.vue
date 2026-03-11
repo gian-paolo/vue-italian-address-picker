@@ -1,181 +1,104 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
-// Importiamo il client e i tipi dal pacchetto core agnostico
-import { ItalianAddressClient } from '@pallari/italian-address-client';
-import type { Municipality, Street, Address } from '@pallari/italian-address-client';
-import AutoComplete from 'primevue/autocomplete';
+import { useItalianAddress } from '../composables/useItalianAddress';
+import AnncsuiMunicipality from './atomic/AnncsuiMunicipality.vue';
+import AnncsuiStreet from './atomic/AnncsuiStreet.vue';
+import AnncsuiAddress from './atomic/AnncsuiAddress.vue';
+import AnncsuiVariant from './atomic/AnncsuiVariant.vue';
+import { watch } from 'vue';
 
 const props = defineProps({
   baseUrl: { type: String, default: 'https://anncsu-api.dataws.it/v1' },
   modelValue: { 
     type: Object, 
-    default: () => ({ municipality: null, street: null, address: null }) 
+    default: () => ({ municipality: null, street: null, address: null, variant: null }) 
   },
-  placeholderMunicipality: { type: String, default: 'Cerca Comune (es. Milano)' },
-  placeholderStreet: { type: String, default: 'Via, Piazza, Corso...' },
-  placeholderNumber: { type: String, default: 'N°' },
-  enableCivicColors: { type: Boolean, default: true },
+  mode: { type: String, default: 'cascaded', validator: (v: string) => ['cascaded', 'unified'].includes(v) },
+  layout: { type: String, default: 'grid', validator: (v: string) => ['grid', 'vertical'].includes(v) },
+  placeholderMunicipality: { type: String },
+  placeholderStreet: { type: String },
+  placeholderNumber: { type: String },
+  placeholderVariant: { type: String },
 });
 
-const emit = defineEmits(['update:modelValue', 'select', 'change']);
+const emit = defineEmits(['update:modelValue', 'change', 'select']);
 
-// Inizializziamo il client "motore"
-const client = new ItalianAddressClient({ baseUrl: props.baseUrl });
-
-// States
-const loading = ref({ municipalities: false, streets: false, addresses: false });
-const suggestions = ref<{ municipalities: Municipality[], streets: Street[], addresses: Address[] }>({
-  municipalities: [],
-  streets: [],
-  addresses: []
-});
-
-const selected = ref({ ...props.modelValue });
-
-// 1. Cerca Comuni (Usa il metodo nativo del client)
-const onSearchMunicipality = async (event: any) => {
-  if (event.query.trim().length < 2) return;
-  loading.value.municipalities = true;
-  try {
-    suggestions.value.municipalities = await client.searchMunicipalities(event.query, { limit: 10 });
-  } finally {
-    loading.value.municipalities = false;
-  }
-};
-
-// 2. Cerca Strade (Filtra per comune selezionato)
-const onSearchStreet = async (event: any) => {
-  if (!selected.value.municipality || event.query.trim().length < 3) return;
-  loading.value.streets = true;
-  try {
-    suggestions.value.streets = await client.searchStreets(event.query, { 
-      istat_code: selected.value.municipality.istat_code,
-      limit: 15 
-    });
-  } finally {
-    loading.value.streets = false;
-  }
-};
-
-// 3. Cerca Numeri Civici (Usa il fetch interno del client per gli indirizzi)
-const onSearchNumber = async (event: any) => {
-  if (!selected.value.street) return;
-  loading.value.addresses = true;
-  try {
-    suggestions.value.addresses = await client._fetch<Address>('addresses', { 
-      street_id: `eq.${selected.value.street.id}`, 
-      full_number: `ilike.${event.query}*`,
-      limit: 20, 
-      order: 'number.asc' 
-    });
-  } finally {
-    loading.value.addresses = false;
-  }
-};
-
-// Logica: Reset a cascata
-watch(() => selected.value.municipality, (newVal) => {
-  if (!newVal || typeof newVal === 'string') {
-    selected.value.street = null;
-    selected.value.address = null;
+const { 
+  state, 
+  loading, 
+  suggestions, 
+  searchMunicipalities, 
+  searchStreets, 
+  searchAddresses 
+} = useItalianAddress({
+  baseUrl: props.baseUrl,
+  initialState: props.modelValue,
+  onStateChange: (newState) => {
+    emit('update:modelValue', newState);
+    emit('change', newState);
+    emit('select', newState);
   }
 });
 
-watch(() => selected.value.street, (newVal) => {
-  if (!newVal || typeof newVal === 'string') {
-    selected.value.address = null;
+// Update internal state if props.modelValue changes from outside
+watch(() => props.modelValue, (newVal) => {
+  if (JSON.stringify(newVal) !== JSON.stringify(state.value)) {
+    state.value = { ...state.value, ...newVal };
   }
-});
-
-// Sincronizzazione con v-model
-watch(selected, (newVal) => {
-  emit('update:modelValue', newVal);
-  emit('change', newVal);
 }, { deep: true });
 
-// Helper per i colori dei civici (SNARE/ANNCSU standard)
-const getCivicClass = (address: Address) => {
-  if (!props.enableCivicColors || !address.specificity) return '';
-  const s = address.specificity.trim().toUpperCase();
-  if (s === 'R' || s.startsWith('ROSS')) return 'anncsui-civic-red';
-  if (s === 'N' || s.startsWith('NER')) return 'anncsui-civic-black';
-  return '';
-};
 </script>
 
 <template>
-  <div class="anncsui-container p-fluid grid formgrid">
+  <div class="anncsui-container" :class="layout === 'grid' ? 'p-fluid grid formgrid' : 'flex flex-column gap-3'">
     <!-- COMUNE -->
-    <div class="field col-12 md:col-4">
+    <div :class="layout === 'grid' ? 'field col-12 md:col-4' : 'field w-full'">
       <label class="font-bold block mb-2">Comune</label>
-      <AutoComplete 
-        v-model="selected.municipality"
+      <AnncsuiMunicipality
+        v-model="state.municipality"
         :suggestions="suggestions.municipalities"
-        @complete="onSearchMunicipality"
         :loading="loading.municipalities"
-        optionLabel="name"
         :placeholder="placeholderMunicipality"
-        dropdown
-        emptyMessage="Nessun comune trovato"
-      >
-        <template #option="slotProps">
-          <div class="flex flex-column">
-            <span class="font-medium">{{ slotProps.option.name }}</span>
-            <small class="text-color-secondary">{{ slotProps.option.province }} ({{ slotProps.option.region }})</small>
-          </div>
-        </template>
-      </AutoComplete>
+        @complete="searchMunicipalities"
+      />
     </div>
 
     <!-- STRADA -->
-    <div class="field col-12 md:col-6">
+    <div :class="layout === 'grid' ? 'field col-12 md:col-6' : 'field w-full'">
       <label class="font-bold block mb-2">Indirizzo</label>
-      <AutoComplete 
-        v-model="selected.street"
+      <AnncsuiStreet
+        v-model="state.street"
         :suggestions="suggestions.streets"
-        @complete="onSearchStreet"
         :loading="loading.streets"
-        :disabled="!selected.municipality"
-        optionLabel="full_street_name"
+        :disabled="!state.municipality"
         :placeholder="placeholderStreet"
-        emptyMessage="Nessuna strada trovata in questo comune"
-      >
-        <template #option="slotProps">
-          <div class="flex align-items-center">
-            <i class="pi pi-map-marker mr-2 text-primary"></i>
-            <div>
-               <span>{{ slotProps.option.full_street_name }}</span>
-               <small v-if="slotProps.option.locality" class="block text-xs italic">{{ slotProps.option.locality }}</small>
-            </div>
-          </div>
-        </template>
-      </AutoComplete>
+        @complete="searchStreets"
+      />
     </div>
 
     <!-- CIVICO -->
-    <div class="field col-12 md:col-2">
+    <div :class="layout === 'grid' ? (mode === 'cascaded' ? 'field col-12 md:col-2' : 'field col-12 md:col-2') : 'field w-full'">
       <label class="font-bold block mb-2">Civico</label>
-      <AutoComplete 
-        v-model="selected.address"
-        :suggestions="suggestions.addresses"
-        @complete="onSearchNumber"
+      <AnncsuiAddress
+        v-model="state.address"
+        :suggestions="mode === 'unified' ? suggestions.variants : suggestions.addresses"
         :loading="loading.addresses"
-        :disabled="!selected.street"
-        optionLabel="full_number"
+        :disabled="!state.street"
+        :isSelect="mode === 'cascaded'"
         :placeholder="placeholderNumber"
-        emptyMessage="-"
-      >
-        <template #option="slotProps">
-          <div class="flex align-items-center justify-content-between w-full">
-            <span :class="getCivicClass(slotProps.option)">
-              {{ slotProps.option.full_number }}
-            </span>
-            <small v-if="slotProps.option.specificity" class="text-xs opacity-60 ml-2">
-              {{ slotProps.option.specificity }}
-            </small>
-          </div>
-        </template>
-      </AutoComplete>
+        @complete="searchAddresses($event, mode === 'unified')"
+      />
+    </div>
+
+    <!-- VARIANTE (Only in cascaded mode and if variants exist) -->
+    <div v-if="mode === 'cascaded' && (state.variant || suggestions.variants.length > 0)" 
+         :class="layout === 'grid' ? 'field col-12 md:col-2' : 'field w-full'">
+      <label class="font-bold block mb-2">Variante</label>
+      <AnncsuiVariant
+        v-model="state.variant"
+        :suggestions="suggestions.variants"
+        :loading="loading.variants"
+        :placeholder="placeholderVariant"
+      />
     </div>
   </div>
 </template>
@@ -188,23 +111,6 @@ const getCivicClass = (address: Address) => {
   box-shadow: 0 2px 12px rgba(0,0,0,0.08);
   border: 1px solid var(--surface-border, #eee);
 }
-
-.anncsui-civic-red {
-  color: #ef4444;
-  font-weight: 700;
-  border-bottom: 2px solid #ef4444;
-}
-
-.anncsui-civic-black {
-  color: #1f2937;
-  font-weight: 700;
-  border-bottom: 2px solid #1f2937;
-}
-
-:deep(.p-autocomplete-input) {
-  border-radius: 8px;
-}
-
 label {
   color: var(--text-color, #444);
   font-size: 0.9rem;
