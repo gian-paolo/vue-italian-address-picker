@@ -42,33 +42,52 @@ export function useItalianAddress(options: UseItalianAddressOptions = {}) {
     variants: [] as AccessPoint[],
   });
 
+  // Trackers for race conditions
+  const requests = { municipalities: 0, streets: 0, addresses: 0, variants: 0 };
+  const displayed = { municipalities: 0, streets: 0, addresses: 0, variants: 0 };
+
   // Search logic
   const searchMunicipalities = async (query: string) => {
     if (query.trim().length < 2) return;
+    const requestId = ++requests.municipalities;
     loading.value.municipalities = true;
     try {
-      suggestions.value.municipalities = await client.searchMunicipalities(query, { limit: 10 });
+      const data = await client.searchMunicipalities(query, { limit: 10 });
+      if (requestId > displayed.municipalities) {
+        displayed.municipalities = requestId;
+        suggestions.value.municipalities = data;
+      }
     } finally {
-      loading.value.municipalities = false;
+      if (requestId === requests.municipalities) {
+        loading.value.municipalities = false;
+      }
     }
   };
 
   const searchStreets = async (query: string, dug_id?: number) => {
     if (!state.value.municipality || query.trim().length < 3) return;
+    const requestId = ++requests.streets;
     loading.value.streets = true;
     try {
-      suggestions.value.streets = await client.searchStreets(query, {
+      const data = await client.searchStreets(query, {
         istat_code: state.value.municipality.istat_code,
         dug_id: dug_id || state.value.dug_id || undefined,
         limit: 15,
       });
+      if (requestId > displayed.streets) {
+        displayed.streets = requestId;
+        suggestions.value.streets = data;
+      }
     } finally {
-      loading.value.streets = false;
+      if (requestId === requests.streets) {
+        loading.value.streets = false;
+      }
     }
   };
 
   const searchAddresses = async (query: string, unified = false) => {
     if (!state.value.street) return;
+    const requestId = ++requests.addresses;
     loading.value.addresses = true;
     try {
       const endpoint = unified ? 'access_points' : 'addresses';
@@ -81,23 +100,35 @@ export function useItalianAddress(options: UseItalianAddressOptions = {}) {
         params[unified ? 'label' : 'full_number'] = `ilike.*${query}*`;
       }
       const data = await client._fetch(endpoint, params);
-      if (unified) {
-        suggestions.value.variants = data;
-      } else {
-        suggestions.value.addresses = data;
+      if (requestId > displayed.addresses) {
+        displayed.addresses = requestId;
+        if (unified) {
+          suggestions.value.variants = data;
+        } else {
+          suggestions.value.addresses = data;
+        }
       }
     } finally {
-      loading.value.addresses = false;
+      if (requestId === requests.addresses) {
+        loading.value.addresses = false;
+      }
     }
   };
 
   const fetchVariants = async (address: Address) => {
     if (!address) return;
+    const requestId = ++requests.variants;
     loading.value.variants = true;
     try {
-      suggestions.value.variants = await client.getAccessPoints(address.street_id, address.number || 0, address.extension);
+      const data = await client.getAccessPoints(address.street_id, address.number || 0, address.extension);
+      if (requestId > displayed.variants) {
+        displayed.variants = requestId;
+        suggestions.value.variants = data;
+      }
     } finally {
-      loading.value.variants = false;
+      if (requestId === requests.variants) {
+        loading.value.variants = false;
+      }
     }
   };
 
